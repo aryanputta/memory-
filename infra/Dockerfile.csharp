@@ -1,0 +1,44 @@
+# ── Stage 1: Build C# API gateway ────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS builder
+
+# Install protoc + grpc plugin for C# stub generation
+RUN apt-get update && apt-get install -y \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Copy solution and project files first (layer cache for NuGet restore)
+COPY csharp/MercuryCache.sln .
+COPY csharp/MercuryCache.Api/MercuryCache.Api.csproj         MercuryCache.Api/
+COPY csharp/MercuryCache.Core/MercuryCache.Core.csproj       MercuryCache.Core/
+COPY csharp/MercuryCache.Cluster/MercuryCache.Cluster.csproj MercuryCache.Cluster/
+COPY csharp/MercuryCache.ML/MercuryCache.ML.csproj           MercuryCache.ML/
+
+RUN dotnet restore MercuryCache.sln
+
+# Copy remaining source (including shared proto)
+COPY csharp/ .
+COPY cpp/grpc/cache_node.proto /proto/cache_node.proto
+
+RUN dotnet publish MercuryCache.Api/MercuryCache.Api.csproj \
+    -c Release -o /publish --no-restore
+
+# ── Stage 2: Minimal ASP.NET runtime ─────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+
+RUN useradd -r -s /bin/false mercury
+WORKDIR /app
+COPY --from=builder /publish .
+RUN chown -R mercury:mercury /app
+USER mercury
+
+ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["dotnet", "MercuryCache.Api.dll"]

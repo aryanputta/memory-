@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MercuryCache.Api</RootNamespace>
+    <AssemblyName>MercuryCache.Api</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.AspNetCore"           Version="2.62.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore"    Version="6.5.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MercuryCache.Core\MercuryCache.Core.csproj" />
+    <ProjectReference Include="..\MercuryCache.Cluster\MercuryCache.Cluster.csproj" />
+  </ItemGroup>
+
+</Project>

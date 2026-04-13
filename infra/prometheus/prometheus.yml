@@ -1,0 +1,40 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: mercurycache-dev
+
+scrape_configs:
+
+  # C# API gateway metrics (ASP.NET Core Prometheus exporter)
+  - job_name: mercury-api
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: /metrics
+
+  # C++ cache nodes via HTTP bridge on port 9100
+  # (The cache node server exposes /metrics via a thin HTTP wrapper in production)
+  - job_name: mercury-cache-node-0
+    static_configs:
+      - targets: ['cache-node-0:9100']
+    metrics_path: /metrics
+
+  - job_name: mercury-cache-node-1
+    static_configs:
+      - targets: ['cache-node-1:9100']
+    metrics_path: /metrics
+
+  - job_name: mercury-cache-node-2
+    static_configs:
+      - targets: ['cache-node-2:9100']
+    metrics_path: /metrics
+
+  # PostgreSQL exporter
+  - job_name: postgres
+    static_configs:
+      - targets: ['postgres:5432']
+
+alerting:
+  alertmanagers: []
+
+rule_files: []

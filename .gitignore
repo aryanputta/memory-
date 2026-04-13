@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+benchmarking/results/
+
+# C++ build artifacts
+cpp/build/
+*.o
+*.a
+*.so
+*.out
+
+# C# build artifacts
+csharp/**/bin/
+csharp/**/obj/
+
+# ML artifacts (tracked separately)
+ml/exported_models/*.onnx
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker secrets / env
+*.env
+.env

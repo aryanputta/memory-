@@ -1,0 +1,188 @@
+version: "3.9"
+
+# ==========================================================================
+# MercuryCache++ — Full cluster stack
+#
+# Services:
+#   cache-node-{0,1,2}  — C++ gRPC cache nodes (high-performance engine)
+#   api-gateway          — C# ASP.NET Core coordinator
+#   postgres             — Backing store (source of truth)
+#   prometheus           — Metrics scraping
+#   grafana              — Dashboards
+#   benchmark            — Python workload generator (optional)
+# ==========================================================================
+
+networks:
+  mercury-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+
+services:
+
+  # ── PostgreSQL: Source of Truth ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       mercury_source
+      POSTGRES_USER:     mercury
+      POSTGRES_PASSWORD: mercury
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - mercury-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mercury -d mercury_source"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  # ── C++ Cache Node 0 ─────────────────────────────────────────────────────
+  cache-node-0:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.cpp
+    restart: unless-stopped
+    command: ["0.0.0.0:50051", "node-0", "256"]
+    environment:
+      MERCURY_NODE_ID: node-0
+    ports:
+      - "50051:50051"
+    networks:
+      - mercury-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus:   "1.0"
+
+  # ── C++ Cache Node 1 ─────────────────────────────────────────────────────
+  cache-node-1:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.cpp
+    restart: unless-stopped
+    command: ["0.0.0.0:50051", "node-1", "256"]
+    environment:
+      MERCURY_NODE_ID: node-1
+    ports:
+      - "50052:50051"
+    networks:
+      - mercury-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus:   "1.0"
+
+  # ── C++ Cache Node 2 ─────────────────────────────────────────────────────
+  cache-node-2:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.cpp
+    restart: unless-stopped
+    command: ["0.0.0.0:50051", "node-2", "256"]
+    environment:
+      MERCURY_NODE_ID: node-2
+    ports:
+      - "50053:50051"
+    networks:
+      - mercury-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus:   "1.0"
+
+  # ── C# API Gateway ───────────────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.csharp
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cache-node-0:
+        condition: service_started
+      cache-node-1:
+        condition: service_started
+      cache-node-2:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT:   Production
+      ASPNETCORE_URLS:          http://+:8080
+      ConnectionStrings__BackingStore: >
+        Host=postgres;Database=mercury_source;Username=mercury;Password=mercury
+      Cache__Nodes__0: cache-node-0:50051
+      Cache__Nodes__1: cache-node-1:50051
+      Cache__Nodes__2: cache-node-2:50051
+      Cache__ReplicationFactor: 2
+      Cache__HotKeyThresholdQps: 500
+    ports:
+      - "8080:8080"
+    networks:
+      - mercury-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout:   5s
+      retries:   5
+      start_period: 20s
+
+  # ── Prometheus ───────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "9090:9090"
+    networks:
+      - mercury-net
+
+  # ── Grafana ──────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: mercury
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+    ports:
+      - "3000:3000"
+    networks:
+      - mercury-net
+
+  # ── Benchmark (run manually: docker compose run benchmark) ───────────────
+  benchmark:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.benchmark
+    profiles:
+      - bench
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    environment:
+      MERCURY_API: http://api-gateway:8080
+    networks:
+      - mercury-net
+    volumes:
+      - ../benchmarking/results:/bench/results

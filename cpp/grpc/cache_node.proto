@@ -1,0 +1,163 @@
+syntax = "proto3";
+package mercury;
+option csharp_namespace = "Mercury.Grpc";
+
+// ============================================================
+// CacheNodeService — internal gRPC API between the C# service
+// layer and each C++ cache node.
+// ============================================================
+
+service CacheNodeService {
+  rpc Get          (CacheGetRequest)       returns (CacheGetResponse);
+  rpc Put          (CachePutRequest)       returns (CachePutResponse);
+  rpc Delete       (CacheDeleteRequest)    returns (CacheDeleteResponse);
+  rpc BatchGet     (CacheBatchGetRequest)  returns (CacheBatchGetResponse);
+  rpc Heartbeat    (HeartbeatRequest)      returns (HeartbeatResponse);
+  rpc Replicate    (ReplicateWriteRequest) returns (ReplicateWriteResponse);
+  rpc Invalidate   (InvalidateRequest)     returns (InvalidateResponse);
+  rpc WarmKey      (WarmKeyRequest)        returns (WarmKeyResponse);
+  rpc ExportMetrics(MetricsRequest)        returns (MetricsResponse);
+}
+
+// ---- Get ------------------------------------------------------------------
+message CacheGetRequest {
+  string namespace    = 1;
+  string key          = 2;
+  string consistency  = 3; // "eventual" | "strong"
+  bool   allow_stale  = 4;
+  string trace_id     = 5;
+  int64  deadline_ms  = 6;
+}
+
+message CacheGetResponse {
+  bool   found            = 1;
+  bytes  value            = 2;
+  string source           = 3; // "cache" | "stale_cache"
+  int64  ttl_remaining_ms = 4;
+  int64  version          = 5;
+  bool   stale            = 6;
+  string node_id          = 7;
+  string trace_id         = 8;
+}
+
+// ---- Put ------------------------------------------------------------------
+message CachePutRequest {
+  string namespace   = 1;
+  string key         = 2;
+  bytes  value       = 3;
+  int64  ttl_ms      = 4;
+  string write_mode  = 5; // "write_through" | "write_around"
+  int64  version     = 6;
+  string trace_id    = 7;
+}
+
+message CachePutResponse {
+  string status   = 1; // "admitted" | "rejected" | "updated"
+  string node_id  = 2;
+  string trace_id = 3;
+}
+
+// ---- Delete ---------------------------------------------------------------
+message CacheDeleteRequest {
+  string namespace = 1;
+  string key       = 2;
+  string trace_id  = 3;
+}
+
+message CacheDeleteResponse {
+  bool   deleted  = 1;
+  string node_id  = 2;
+  string trace_id = 3;
+}
+
+// ---- BatchGet -------------------------------------------------------------
+message CacheBatchGetRequest {
+  string         namespace   = 1;
+  repeated string keys       = 2;
+  string          consistency = 3;
+  string          trace_id   = 4;
+}
+
+message BatchItem {
+  string key     = 1;
+  bool   found   = 2;
+  bytes  value   = 3;
+  string source  = 4;
+  int64  version = 5;
+  bool   stale   = 6;
+}
+
+message CacheBatchGetResponse {
+  repeated BatchItem items    = 1;
+  string             trace_id = 2;
+}
+
+// ---- Heartbeat ------------------------------------------------------------
+message HeartbeatRequest {
+  string node_id    = 1;
+  int64  timestamp  = 2;
+}
+
+message HeartbeatResponse {
+  string node_id   = 1;
+  bool   healthy   = 2;
+  double cpu_util  = 3;
+  double mem_util  = 4;
+  int64  item_count = 5;
+  int64  bytes_used = 6;
+}
+
+// ---- Replication ----------------------------------------------------------
+message ReplicateWriteRequest {
+  string namespace       = 1;
+  string key             = 2;
+  bytes  value           = 3;
+  int64  ttl_ms          = 4;
+  int64  version         = 5;
+  string primary_node_id = 6;
+  string trace_id        = 7;
+}
+
+message ReplicateWriteResponse {
+  string status   = 1;
+  string node_id  = 2;
+  string trace_id = 3;
+}
+
+// ---- Invalidate -----------------------------------------------------------
+message InvalidateRequest {
+  string namespace   = 1;
+  string key         = 2;
+  int64  min_version = 3;
+  string reason      = 4;  // "write_around" | "manual" | "ttl_sync"
+  string trace_id    = 5;
+}
+
+message InvalidateResponse {
+  bool   invalidated = 1;
+  string node_id     = 2;
+  string trace_id    = 3;
+}
+
+// ---- WarmKey --------------------------------------------------------------
+message WarmKeyRequest {
+  string namespace = 1;
+  string key       = 2;
+  bytes  value     = 3;
+  int64  ttl_ms    = 4;
+  int64  version   = 5;
+  string trace_id  = 6;
+}
+
+message WarmKeyResponse {
+  bool   warmed   = 1;
+  string node_id  = 2;
+  string trace_id = 3;
+}
+
+// ---- Metrics --------------------------------------------------------------
+message MetricsRequest {}
+
+message MetricsResponse {
+  string prometheus_text = 1; // full Prometheus exposition format
+}

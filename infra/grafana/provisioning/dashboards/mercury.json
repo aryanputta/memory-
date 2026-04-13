@@ -1,0 +1,106 @@
+{
+  "title": "MercuryCache++ Cluster",
+  "uid": "mercury-main",
+  "version": 1,
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Cache Hit Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "mercury_cache_hits / (mercury_cache_hits + mercury_cache_misses)",
+          "legendFormat": "Hit Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              {"color": "red",    "value": 0},
+              {"color": "yellow", "value": 0.8},
+              {"color": "green",  "value": 0.95}
+            ]
+          }
+        }
+      },
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 2,
+      "title": "p99 Latency (ms)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "mercury_get_latency_us{quantile=\"0.99\"} / 1000",
+          "legendFormat": "p99 ms"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "steps": [
+              {"color": "green",  "value": 0},
+              {"color": "yellow", "value": 10},
+              {"color": "red",    "value": 50}
+            ]
+          }
+        }
+      },
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 3,
+      "title": "DB Fallback Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(mercury_db_fallbacks[1m]) / rate(mercury_cache_hits[1m] + mercury_cache_misses[1m] + 0.001)",
+          "legendFormat": "DB Fallback Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              {"color": "green",  "value": 0},
+              {"color": "yellow", "value": 0.05},
+              {"color": "red",    "value": 0.15}
+            ]
+          }
+        }
+      },
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 4,
+      "title": "Evictions / sec",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(mercury_eviction_count[1m])",
+          "legendFormat": "evictions/s"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 6}
+    },
+    {
+      "id": 5,
+      "title": "Latency Distribution",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "mercury_get_latency_us{quantile=\"0.50\"} / 1000", "legendFormat": "p50"},
+        {"expr": "mercury_get_latency_us{quantile=\"0.95\"} / 1000", "legendFormat": "p95"},
+        {"expr": "mercury_get_latency_us{quantile=\"0.99\"} / 1000", "legendFormat": "p99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}},
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 6}
+    }
+  ],
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "10s"
+}

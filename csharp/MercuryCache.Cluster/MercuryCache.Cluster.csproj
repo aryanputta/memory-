@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MercuryCache.Cluster</RootNamespace>
+    <AssemblyName>MercuryCache.Cluster</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client"              Version="2.62.0" />
+    <PackageReference Include="Google.Protobuf"              Version="3.26.1" />
+    <PackageReference Include="Grpc.Tools"                   Version="2.62.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"     Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared proto: generates gRPC stubs used by CacheNodeClient -->
+    <Protobuf Include="..\..\cpp\grpc\cache_node.proto"
+              GrpcServices="Client"
+              Access="Public"
+              ProtoRoot="..\..\cpp\grpc" />
+  </ItemGroup>
+
+</Project>

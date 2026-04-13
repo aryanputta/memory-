@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MercuryCache.Core</RootNamespace>
+    <AssemblyName>MercuryCache.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client"              Version="2.62.0" />
+    <PackageReference Include="Google.Protobuf"              Version="3.26.1" />
+    <PackageReference Include="Grpc.Tools"                   Version="2.62.0" PrivateAssets="All" />
+    <PackageReference Include="Npgsql"                       Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MercuryCache.Cluster\MercuryCache.Cluster.csproj" />
+  </ItemGroup>
+
+</Project>

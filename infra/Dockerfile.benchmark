@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /bench
+
+COPY benchmarking/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY benchmarking/ .
+
+ENV MERCURY_API=http://api-gateway:8080
+
+ENTRYPOINT ["python", "runner.py"]
+CMD ["--workload", "zipf", "--rps", "1000", "--duration", "60"]
