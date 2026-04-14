@@ -15,11 +15,6 @@ namespace MercuryCache.Core
     /// </summary>
     public class SingleFlightManager
     {
-        private readonly Dictionary<string, Task<T>> _flights = new();
-        // Use separate locks because dictionary is not thread-safe
-        private readonly object _lock = new();
-
-        // Non-generic version for GetCacheResponse (most common call site)
         private readonly Dictionary<string, object> _tasks = new();
         private readonly object _taskLock = new();
 

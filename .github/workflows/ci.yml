@@ -63,11 +63,14 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
+          # Install required build tools (all must succeed)
           sudo apt-get install -y \
             cmake ninja-build \
             libgtest-dev libgmock-dev \
             libssl-dev libprotobuf-dev protobuf-compiler \
-            libgrpc++-dev protobuf-compiler-grpc || true
+            libgrpc++-dev protobuf-compiler-grpc
+          # Optional: ONNX Runtime (not in Ubuntu default repos — best-effort only)
+          sudo apt-get install -y libonnxruntime-dev 2>/dev/null || true
 
       - name: Configure CMake
         working-directory: cpp
