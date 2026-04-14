@@ -24,4 +24,8 @@
               ProtoRoot="..\..\cpp\grpc" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\MercuryCache.Core\MercuryCache.Core.csproj" />
+  </ItemGroup>
+
 </Project>
