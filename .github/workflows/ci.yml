@@ -1,0 +1,148 @@
+name: MercuryCache CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  CMAKE_BUILD_TYPE: Release
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: C# build + tests
+  # ─────────────────────────────────────────────────────────────────────────────
+  csharp:
+    name: "C# Build & Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore NuGet packages
+        run: dotnet restore csharp/MercuryCache.sln
+
+      - name: Build solution (Release)
+        run: dotnet build csharp/MercuryCache.sln --configuration Release --no-restore
+
+      - name: Run unit tests
+        run: |
+          dotnet test csharp/MercuryCache.Tests/MercuryCache.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --verbosity normal \
+            --logger "trx;LogFileName=test-results.trx" \
+            --collect:"XPlat Code Coverage"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-test-results
+          path: "**/*.trx"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: C++ build + tests (cmake + googletest)
+  # Note: marked continue-on-error because gRPC system packages vary by runner.
+  # ─────────────────────────────────────────────────────────────────────────────
+  cpp:
+    name: "C++ Build & Test"
+    runs-on: ubuntu-latest
+    continue-on-error: true   # native deps (gRPC) may not be available on all runners
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            cmake ninja-build \
+            libgtest-dev libgmock-dev \
+            libssl-dev libprotobuf-dev protobuf-compiler \
+            libgrpc++-dev protobuf-compiler-grpc || true
+
+      - name: Configure CMake
+        working-directory: cpp
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} \
+            -DBUILD_TESTS=ON
+
+      - name: Build
+        working-directory: cpp
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Run C++ tests
+        working-directory: cpp/build
+        run: ctest --output-on-failure --parallel $(nproc)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3: Python lint + unit tests
+  # ─────────────────────────────────────────────────────────────────────────────
+  python:
+    name: "Python Lint & Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install aiohttp numpy pytest
+          if [ -f benchmarking/requirements.txt ]; then
+            pip install -r benchmarking/requirements.txt
+          fi
+
+      - name: Syntax check (compile all .py files)
+        run: |
+          find benchmarking ml -name "*.py" -print0 | \
+            xargs -0 python -m py_compile && \
+            echo "All Python files compile OK"
+
+      - name: Run Python unit tests
+        run: |
+          if [ -d benchmarking/tests ]; then
+            pytest benchmarking/tests -v --tb=short
+          else
+            echo "No benchmarking/tests directory — skipping pytest"
+          fi
+
+      - name: Run benchmark smoke test
+        working-directory: benchmarking
+        run: |
+          # Quick smoke: import the analysis module and run _percentile
+          python - <<'EOF'
+          import sys, os
+          sys.path.insert(0, os.getcwd())
+          from runner import _percentile
+          from workloads.zipf_generator import ZipfGenerator
+          # _percentile: idx = int(p * len), data[idx], 0-indexed
+          data = list(range(1, 101))   # [1..100], length 100
+          # p=0.5 -> idx=50 -> data[50]=51
+          assert _percentile(data, 0.5)  == 51,  f"p50 failed: {_percentile(data, 0.5)}"
+          # p=0.99 -> idx=99 -> data[99]=100
+          assert _percentile(data, 0.99) == 100, f"p99 failed: {_percentile(data, 0.99)}"
+          # Zipf generation smoke test
+          gen = ZipfGenerator(n=100, alpha=0.99)
+          keys = [gen.next_key() for _ in range(1000)]
+          assert len(keys) == 1000, f"Zipf len wrong: {len(keys)}"
+          # Verify most keys are valid "catalog:item:N" strings
+          assert all(k.startswith("catalog:item:") for k in keys), "Unexpected key format"
+          print("Smoke tests passed")
+          EOF

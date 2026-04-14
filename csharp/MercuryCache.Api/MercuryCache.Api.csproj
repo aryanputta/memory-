@@ -9,14 +9,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.AspNetCore"           Version="2.62.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore"    Version="6.5.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Grpc.AspNetCore"                        Version="2.62.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore"                 Version="6.5.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi"           Version="8.0.0" />
+    <!-- Request-timeout middleware (ASP.NET Core 8) -->
+    <PackageReference Include="Microsoft.AspNetCore.RequestTimeouts"   Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MercuryCache.Core\MercuryCache.Core.csproj" />
     <ProjectReference Include="..\MercuryCache.Cluster\MercuryCache.Cluster.csproj" />
+    <ProjectReference Include="..\MercuryCache.Transport\MercuryCache.Transport.csproj" />
   </ItemGroup>
 
 </Project>

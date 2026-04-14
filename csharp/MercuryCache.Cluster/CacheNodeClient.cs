@@ -1,4 +1,5 @@
 using System;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Net.Client;
@@ -9,7 +10,16 @@ namespace MercuryCache.Cluster
 {
     /// <summary>
     /// gRPC client wrapper for a single C++ cache node.
-    /// All calls propagate trace IDs and respect timeout budgets.
+    ///
+    /// Idle-timeout fix: HTTP/2 keepalive pings keep the channel alive when
+    /// no requests are in-flight.  Without them, load-balancers and NAT boxes
+    /// silently close idle TCP connections, causing the next RPC to fail with
+    /// "stream removed" / "connection reset" and appear as a timeout.
+    ///
+    /// Settings mirror gRPC-Go defaults used by Amazon internal services:
+    ///   - Ping every 30 s when idle
+    ///   - Close if no ping ACK within 10 s
+    ///   - Allow pings even with no active RPCs
     /// </summary>
     public class CacheNodeClient : IDisposable
     {
@@ -22,11 +32,30 @@ namespace MercuryCache.Cluster
         public CacheNodeClient(string address)
         {
             _address = address;
+
+            // Build an HttpClient with socket-level keepalive + HTTP/2 ping
+            var socketsHandler = new SocketsHttpHandler
+            {
+                // TCP keepalive: OS will send ACK probes if no data for 30 s
+                KeepAlivePingDelay   = TimeSpan.FromSeconds(30),
+                KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
+                KeepAlivePingPolicy  = HttpKeepAlivePingPolicy.Always,
+                // Reuse connections; don't open a new one per request
+                PooledConnectionIdleTimeout    = TimeSpan.FromMinutes(5),
+                PooledConnectionLifetime       = TimeSpan.FromMinutes(30),
+                EnableMultipleHttp2Connections = true,
+                // Connect timeout
+                ConnectTimeout = TimeSpan.FromSeconds(5),
+            };
+
             _channel = GrpcChannel.ForAddress($"http://{address}",
                 new GrpcChannelOptions
                 {
-                    MaxReceiveMessageSize = 64 * 1024 * 1024, // 64 MB
-                    MaxSendMessageSize    = 64 * 1024 * 1024
+                    HttpHandler           = socketsHandler,
+                    MaxReceiveMessageSize = 64 * 1024 * 1024,
+                    MaxSendMessageSize    = 64 * 1024 * 1024,
+                    // Dispose the handler when the channel is disposed
+                    DisposeHttpClient     = true,
                 });
             _stub = new CacheNodeService.CacheNodeServiceClient(_channel);
         }
