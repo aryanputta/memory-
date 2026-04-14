@@ -12,8 +12,7 @@
     <PackageReference Include="Grpc.AspNetCore"                        Version="2.62.0" />
     <PackageReference Include="Swashbuckle.AspNetCore"                 Version="6.5.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi"           Version="8.0.0" />
-    <!-- Request-timeout middleware (ASP.NET Core 8) -->
-    <PackageReference Include="Microsoft.AspNetCore.RequestTimeouts"   Version="8.0.0" />
+    <!-- RequestTimeouts is part of Microsoft.AspNetCore.App in .NET 8; no separate package needed -->
   </ItemGroup>
 
   <ItemGroup>

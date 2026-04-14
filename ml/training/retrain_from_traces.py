@@ -305,6 +305,7 @@ def train_and_export(X: np.ndarray, y: np.ndarray,
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
+    global MIN_FUTURE_HITS
     parser = argparse.ArgumentParser(
         description="Retrain MercuryCache admission model from benchmark traces")
     parser.add_argument(
@@ -325,7 +326,6 @@ def main():
         help="Min future accesses in lookahead window to label admit=1")
     args = parser.parse_args()
 
-    global MIN_FUTURE_HITS
     MIN_FUTURE_HITS = args.min_future_hits
 
     traces_dir = os.path.realpath(args.traces_dir)

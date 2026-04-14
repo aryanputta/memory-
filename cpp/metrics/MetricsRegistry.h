@@ -5,8 +5,8 @@
 #include <unordered_map>
 #include <string>
 #include <atomic>
+#include <mutex>
 #include <shared_mutex>
-#include <vector>
 #include <algorithm>
 #include <cstdint>
 #include <cmath>
@@ -31,12 +31,14 @@ private:
 // ---------------------------------------------------------------------------
 class Histogram {
 public:
+    // std::vector<std::atomic<T>> cannot be used: std::atomic is neither
+    // CopyConstructible nor MoveConstructible, so vector's reallocation path
+    // fails to compile.  Use unique_ptr<atomic[]> instead — new[] constructs
+    // each element in place without any copy or move.
     explicit Histogram(size_t num_buckets = 20)
         : num_buckets_(num_buckets)
+        , buckets_(new std::atomic<uint64_t>[num_buckets])
     {
-        // std::atomic is not CopyConstructible, so the fill constructor
-        // std::vector(n, val) cannot be used.  Resize then zero each slot.
-        buckets_.resize(num_buckets);
         for (size_t i = 0; i < num_buckets; ++i)
             buckets_[i].store(0, std::memory_order_relaxed);
     }
@@ -46,13 +48,11 @@ public:
         size_t idx = 0;
         while (idx + 1 < num_buckets_ && rounded >= (1ULL << idx)) ++idx;
         buckets_[idx].fetch_add(1, std::memory_order_relaxed);
-        // Running sum for mean
         sum_.fetch_add(static_cast<uint64_t>(value_us * 1000),
-                       std::memory_order_relaxed); // stored in nano-fractions
+                       std::memory_order_relaxed);
         ++count_;
     }
 
-    // Approximate percentile from bucket histogram
     double Percentile(double p) const {
         uint64_t total = count_.load();
         if (total == 0) return 0.0;
@@ -73,10 +73,10 @@ public:
     uint64_t Count() const { return count_.load(); }
 
 private:
-    std::vector<std::atomic<uint64_t>> buckets_;
+    size_t num_buckets_;
+    std::unique_ptr<std::atomic<uint64_t>[]> buckets_;
     std::atomic<uint64_t> sum_{0};
     std::atomic<uint64_t> count_{0};
-    size_t num_buckets_;
 };
 
 // ---------------------------------------------------------------------------

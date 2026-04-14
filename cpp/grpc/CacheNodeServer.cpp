@@ -12,6 +12,11 @@
 //     --plugin=protoc-gen-grpc=`which grpc_cpp_plugin`
 
 #include "CacheNodeServer.h"
+// Generated protobuf/gRPC stubs (output into build/grpc/ by cmake codegen)
+#include "cache_node.grpc.pb.h"
+#include "cache_node.pb.h"
+// gRPC server runtime
+#include <grpcpp/grpcpp.h>
 #include "../cache_core/CacheStore.h"
 #include "../cache_core/RequestContext.h"
 #include "../hotkeys/HotKeyTracker.h"

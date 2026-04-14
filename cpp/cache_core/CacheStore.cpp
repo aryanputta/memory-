@@ -1,5 +1,6 @@
 #include "CacheStore.h"
 #include <chrono>
+#include <mutex>
 #include <stdexcept>
 
 namespace mercury {
