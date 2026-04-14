@@ -66,7 +66,7 @@ namespace MercuryCache.Cluster
         {
             var req = new CacheGetRequest
             {
-                Namespace_   = ns,
+                Namespace    = ns,
                 Key          = key,
                 Consistency  = consistency,
                 AllowStale   = allowStale,
@@ -96,7 +96,7 @@ namespace MercuryCache.Cluster
         {
             var req = new CachePutRequest
             {
-                Namespace_  = ns,
+                Namespace  = ns,
                 Key         = key,
                 Value       = Google.Protobuf.ByteString.CopyFromUtf8(value),
                 TtlMs       = ttlMs,
@@ -113,7 +113,7 @@ namespace MercuryCache.Cluster
         {
             var req = new CacheDeleteRequest
             {
-                Namespace_ = ns,
+                Namespace = ns,
                 Key        = key,
                 TraceId    = traceId
             };
@@ -128,7 +128,7 @@ namespace MercuryCache.Cluster
         {
             var req = new ReplicateWriteRequest
             {
-                Namespace_    = ns,
+                Namespace    = ns,
                 Key           = key,
                 Value         = Google.Protobuf.ByteString.CopyFromUtf8(value),
                 TtlMs         = ttlMs,
@@ -146,7 +146,7 @@ namespace MercuryCache.Cluster
         {
             var req = new InvalidateRequest
             {
-                Namespace_  = ns,
+                Namespace  = ns,
                 Key         = key,
                 MinVersion  = minVersion,
                 Reason      = reason,
@@ -174,7 +174,7 @@ namespace MercuryCache.Cluster
         {
             var req = new WarmKeyRequest
             {
-                Namespace_ = ns,
+                Namespace = ns,
                 Key        = key,
                 TraceId    = traceId
             };
