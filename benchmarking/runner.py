@@ -175,7 +175,7 @@ async def run_zipf(session: aiohttp.ClientSession, results: WorkloadResults,
         else:
             r = await put_key(session, ns, k)
 
-        _record(results, r)
+        _record(results, r, key=key)
         await asyncio.sleep(interval)
 
 
@@ -189,7 +189,7 @@ async def run_flash_sale(session: aiohttp.ClientSession, results: WorkloadResult
         parts = key.split(":")
         ns, k = parts[0], ":".join(parts[1:])
         r = await get_key(session, ns, k)
-        _record(results, r)
+        _record(results, r, key=key)
         await asyncio.sleep(interval)
 
 
@@ -218,11 +218,71 @@ async def run_failure(session: aiohttp.ClientSession, results: WorkloadResults,
         key  = gen.next_key(NAMESPACE)
         ns, k = key.split(":", 1)
         r    = await get_key(session, ns, k)
-        _record(results, r)
+        _record(results, r, key=key)
         await asyncio.sleep(interval)
 
 
-def _record(results: WorkloadResults, r: RequestResult):
+# ---------------------------------------------------------------------------
+# Trace Collector
+# ---------------------------------------------------------------------------
+class TraceCollector:
+    """
+    Captures per-key access events for offline ML model retraining.
+
+    Each event records enough information to reconstruct the 17 features
+    used by the admission model:
+      - key identity (for frequency counting across the trace)
+      - outcome (cache_hit / cache_miss / backing_store)
+      - latency (proxy for value "cost" to re-fetch)
+      - timestamp (for recency computation)
+      - workload class (zipf / flash_sale / mixed)
+
+    Usage:
+        collector = TraceCollector(workload="zipf")
+        collector.record(key="catalog:item:42", source="cache", latency_ms=1.2)
+        collector.save("results/traces_20240101_120000.jsonl")
+
+    The saved JSONL can be fed to ml/training/retrain_from_traces.py.
+    """
+
+    def __init__(self, workload: str, max_events: int = 100_000):
+        self._workload   = workload
+        self._max_events = max_events
+        self._events: list = []
+        self._key_count: dict = {}   # key → total accesses seen so far
+
+    def record(self, key: str, source: str, latency_ms: float, stale: bool = False):
+        if len(self._events) >= self._max_events:
+            return
+        count = self._key_count.get(key, 0) + 1
+        self._key_count[key] = count
+        self._events.append({
+            "ts":         time.time(),
+            "key":        key,
+            "source":     source,           # "cache" | "backing_store" | "error"
+            "latency_ms": round(latency_ms, 3),
+            "stale":      stale,
+            "cum_count":  count,            # cumulative accesses to this key
+            "workload":   self._workload,
+        })
+
+    def save(self, path: str):
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w") as f:
+            for event in self._events:
+                f.write(json.dumps(event) + "\n")
+        print(f"[trace] {len(self._events):,} events saved to {path}")
+
+    @property
+    def event_count(self) -> int:
+        return len(self._events)
+
+
+# Module-level collector; set before calling _record()
+_trace: TraceCollector | None = None
+
+
+def _record(results: WorkloadResults, r: RequestResult, key: str = ""):
     results.total_requests += 1
     results.latencies_ms.append(r.latency_ms)
     if r.error:
@@ -236,6 +296,10 @@ def _record(results: WorkloadResults, r: RequestResult):
         results.stale_count += 1
     if r.source == "backing_store":
         results.db_fallback_count += 1
+    # ── Trace collection ──────────────────────────────────────────────────
+    if _trace is not None and key:
+        _trace.record(key=key, source=r.source,
+                      latency_ms=r.latency_ms, stale=r.stale)
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +316,9 @@ async def main():
     global API_BASE
     if args.api:
         API_BASE = args.api
+
+    global _trace
+    _trace  = TraceCollector(workload=args.workload)
 
     results = WorkloadResults(
         workload   = args.workload,
@@ -299,6 +366,13 @@ async def main():
     with open(out_path, "w") as f:
         json.dump(summary, f, indent=2)
     print(f"\nResults saved to {out_path}")
+
+    # Persist access traces for ML retraining
+    if _trace and _trace.event_count > 0:
+        trace_path = f"results/traces_{args.workload}_{ts}.jsonl"
+        _trace.save(trace_path)
+        print(f"Traces saved to {trace_path}  "
+              f"(feed to ml/training/retrain_from_traces.py)")
 
 
 if __name__ == "__main__":

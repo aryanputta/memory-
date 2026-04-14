@@ -1,9 +1,9 @@
 using System;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using MercuryCache.Cluster;
 using MercuryCache.Core;
-using MercuryCache.Cluster;
 
 namespace MercuryCache.Api.Controllers
 {
@@ -70,6 +70,78 @@ namespace MercuryCache.Api.Controllers
         {
             var nodes = await _membership.GetActiveNodesAsync();
             return Ok(nodes);
+        }
+
+        /// <summary>
+        /// GET /metrics — Prometheus text-format metrics endpoint.
+        ///
+        /// Exposes the same counters that MetricsAggregator tracks internally
+        /// so Prometheus can scrape the C# API gateway alongside C++ cache nodes.
+        ///
+        /// Format: https://prometheus.io/docs/instrumenting/exposition_formats/
+        /// </summary>
+        [HttpGet("/metrics")]
+        [Produces("text/plain")]
+        public IActionResult PrometheusMetrics()
+        {
+            var s  = _metrics.BuildDashboardSnapshot();
+            var sb = new StringBuilder(512);
+
+            // ── Helpers ───────────────────────────────────────────────────
+            void Gauge(string name, string help, double value, string? labels = null)
+            {
+                sb.AppendLine($"# HELP {name} {help}");
+                sb.AppendLine($"# TYPE {name} gauge");
+                sb.AppendLine(labels != null
+                    ? $"{name}{{{labels}}} {value:G}"
+                    : $"{name} {value:G}");
+            }
+            void Counter(string name, string help, double value)
+            {
+                sb.AppendLine($"# HELP {name} {help}");
+                sb.AppendLine($"# TYPE {name} counter");
+                sb.AppendLine($"{name}_total {value:G}");
+            }
+
+            // ── Cache efficiency ──────────────────────────────────────────
+            Gauge("mercury_cache_hit_rate",
+                  "Fraction of requests served from cache (0-1)",
+                  s.ClusterHitRate);
+
+            Gauge("mercury_db_fallback_rate",
+                  "Fraction of requests that fell back to the backing store (0-1)",
+                  s.DbFallbackRate);
+
+            Gauge("mercury_stale_read_rate",
+                  "Fraction of cache hits that returned a stale value (0-1)",
+                  s.StaleReadRate);
+
+            // ── Latency ───────────────────────────────────────────────────
+            Gauge("mercury_request_latency_ms",
+                  "Estimated request latency (milliseconds)",
+                  s.P50Ms, "quantile=\"0.5\"");
+            Gauge("mercury_request_latency_ms",
+                  "Estimated request latency (milliseconds)",
+                  s.P95Ms, "quantile=\"0.95\"");
+            Gauge("mercury_request_latency_ms",
+                  "Estimated request latency (milliseconds)",
+                  s.P99Ms, "quantile=\"0.99\"");
+
+            // ── Request volume ────────────────────────────────────────────
+            Counter("mercury_requests",
+                    "Total requests processed by the API gateway",
+                    s.TotalRequests);
+
+            // ── Cluster state ─────────────────────────────────────────────
+            Gauge("mercury_hot_key_count",
+                  "Number of keys currently boosted with extra replicas",
+                  s.HotKeyCount);
+
+            Gauge("mercury_rebalance_in_progress",
+                  "1 if a ring rebalance is currently running, 0 otherwise",
+                  s.RebalanceInProgress ? 1 : 0);
+
+            return Content(sb.ToString(), "text/plain; version=0.0.4; charset=utf-8");
         }
 
         // ----------------------------------------------------------------
