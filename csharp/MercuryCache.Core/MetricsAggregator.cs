@@ -1,6 +1,6 @@
 using System;
 using System.Threading;
-using MercuryCache.Api.DTOs;
+using MercuryCache.Cluster;
 
 namespace MercuryCache.Core
 {

@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using MercuryCache.Api.DTOs;
+using MercuryCache.Cluster;
 using MercuryCache.Core;
 
 namespace MercuryCache.Api.Controllers

@@ -4,7 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Net.Client;
 using Mercury.Grpc;
-using MercuryCache.Api.DTOs;
 
 namespace MercuryCache.Cluster
 {
