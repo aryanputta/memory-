@@ -32,7 +32,14 @@ private:
 class Histogram {
 public:
     explicit Histogram(size_t num_buckets = 20)
-        : buckets_(num_buckets, 0), num_buckets_(num_buckets) {}
+        : num_buckets_(num_buckets)
+    {
+        // std::atomic is not CopyConstructible, so the fill constructor
+        // std::vector(n, val) cannot be used.  Resize then zero each slot.
+        buckets_.resize(num_buckets);
+        for (size_t i = 0; i < num_buckets; ++i)
+            buckets_[i].store(0, std::memory_order_relaxed);
+    }
 
     void Record(double value_us) {
         uint64_t rounded = static_cast<uint64_t>(std::max(0.0, value_us));

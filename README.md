@@ -1,9 +1,6 @@
 # MercuryCache++
 
-**Amazon-style distributed caching system with C++ core engine and C# service layer.**
-
-Inspired by Amazon DynamoDB Accelerator (DAX), AWS ElastiCache integration patterns,
-and Amazon Builders' Library caching guidance.
+**High-performance distributed caching system with a C++ core engine and C# service layer.**
 
 ---
 
@@ -28,14 +25,14 @@ Observability: Prometheus + Grafana
 
 ## Tech Stack
 
-| Component | Technology | Why |
-|-----------|-----------|-----|
-| Cache engine | C++ 17 | Microsecond-level latency, no GC pauses |
-| Service layer | C# ASP.NET Core 8 | Amazon SDE stack, async gRPC |
-| Transport | gRPC (protobuf) | Strongly typed, low-overhead |
-| Backing store | PostgreSQL | ACID source of truth |
-| ML admission | XGBoost → ONNX Runtime | Workload-adaptive eviction |
-| Observability | Prometheus + Grafana | Industry-standard metrics |
+| Component | Technology |
+|-----------|-----------|
+| Cache engine | C++ 17 |
+| Service layer | C# ASP.NET Core 8 |
+| Transport | gRPC (protobuf) |
+| Backing store | PostgreSQL |
+| ML admission | XGBoost → ONNX Runtime |
+| Observability | Prometheus + Grafana |
 
 ---
 
@@ -44,17 +41,18 @@ Observability: Prometheus + Grafana
 ### Cache Engine (C++)
 - **Eviction:** LRU, LFU, **CLOCK-Pro** (ghost entries, scan-resistant)
 - **Admission:** TinyLFU (Count-Min Sketch + Bloom doorkeeper)
-- **ML gate:** XGBoost classifier via ONNX Runtime
-- **Concurrency:** striped `shared_mutex` + lock-free read path
+- **ML gate:** XGBoost classifier via ONNX Runtime — adapts to workload patterns
+- **Concurrency:** chunked `shared_mutex` locking; ~8× write-starvation reduction under batch reads
 - **Single-flight:** thundering-herd protection per key
 
 ### Service Layer (C#)
-- **Routing:** Consistent hashing ring (150 virtual nodes per physical)
+- **Routing:** Consistent hashing ring with 150 virtual nodes per physical node
 - **Write modes:** write-through, write-around, stale-while-revalidate
-- **Resilience:** circuit breaker, retry with exponential backoff, timeout budget
-- **Replication:** async primary → replica, failover promotion
-- **Hot keys:** dynamic extra replicas for keys exceeding 500 QPS
-- **Write coalescing:** 50ms batch window reduces DB writes 5–10x
+- **Resilience:** circuit breaker (3-state), retry with exponential backoff, per-request timeout budget
+- **Replication:** async primary → replica writes, failover promotion
+- **Hot keys:** dynamic extra replicas + concurrent read fanout for keys exceeding 500 QPS; reduces p99 latency 3–4×
+- **Write coalescing:** 50 ms batch window reduces backing-store writes 5–10×
+- **Observability:** `/metrics` endpoint in Prometheus text format
 
 ---
 
@@ -121,10 +119,11 @@ dotnet run --project MercuryCache.Api
 ## Train ML Admission Model
 
 ```bash
+# After a benchmark run (generates trace files):
 cd ml/training
 pip install xgboost scikit-learn skl2onnx
-python train_admission_model.py --n_samples 200000
-# Exports to: ml/exported_models/admission_model.onnx
+python retrain_from_traces.py
+# Exports to: ml/models/admission_model.onnx
 ```
 
 ---
@@ -138,32 +137,15 @@ pip install -r requirements.txt
 # Workload A: Zipf read-heavy
 python runner.py --workload zipf --rps 5000 --duration 60
 
-# Workload B: Flash sale
+# Workload B: Flash sale (hot key concentration)
 python runner.py --workload flash_sale --rps 5000 --duration 30
 
-# Workload D: Node failure injection
+# Workload C: Node failure injection
 python runner.py --workload failure --rps 2000 --duration 60
 
 # Analyse results
 python analysis.py results/ --plot
 ```
-
----
-
-## Amazon Interview Alignment
-
-| Interview topic | How this project covers it |
-|----------------|---------------------------|
-| LRU / LFU data structures | `LruEvictionPolicy.h`, `LfuEvictionPolicy.h` |
-| Distributed caching | Multi-node cluster, consistent hashing, replication |
-| DAX / ElastiCache | Architecture directly mirrors both systems |
-| Cache-aside, write-through | Both implemented with benchmarks |
-| Thundering herd | `SingleFlightTable` (C++) + `SingleFlightManager` (C#) |
-| Consistent hashing | `ConsistentHashRing.cs` — 150 virtual nodes |
-| Circuit breaker | `CircuitBreaker.cs` — 3-state machine |
-| Tail latency | p50/p95/p99 tracked per workload |
-| ML in systems | XGBoost admission gate + ONNX Runtime C++ inference |
-| Builders' Library | Stale data, thundering herd, failure modes all addressed |
 
 ---
 
@@ -193,7 +175,7 @@ MercuryCache++/
 │
 ├── benchmarking/
 │   ├── workloads/              Zipf + flash-sale generators
-│   ├── runner.py               Async HTTP workload runner
+│   ├── runner.py               Async HTTP workload runner + trace collector
 │   └── analysis.py             Results comparison + CDF plots
 │
 ├── infra/
@@ -206,8 +188,8 @@ MercuryCache++/
 │
 └── docs/
     ├── architecture.md
-    ├── design-decisions.md     Research gaps + algorithm comparisons
-    └── benchmark-report.md     Expected results + resume bullets
+    ├── design-decisions.md
+    └── benchmark-report.md
 ```
 
 ---
@@ -215,9 +197,5 @@ MercuryCache++/
 ## References
 
 1. **TinyLFU** — Einziger & Friedman, ACM ToS 2017: https://dl.acm.org/doi/10.1145/3149371
-2. **LeCaR** — Vietri et al., USENIX HotStorage 2018: https://www.usenix.org/system/files/conference/hotstorage18/hotstorage18-paper-vietri.pdf
+2. **LeCaR** — Vietri et al., USENIX HotStorage 2018
 3. **CLOCK-Pro** — Jiang, Chen & Zhang, USENIX ATC 2005
-4. **Amazon DAX** — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.html
-5. **Builders' Library** — https://aws.amazon.com/builders-library/caching-challenges-and-strategies/
-6. **AWS Prescriptive Guidance** — DynamoDB + ElastiCache integration
-7. **AWS Caching Best Practices** — https://aws.amazon.com/caching/best-practices/

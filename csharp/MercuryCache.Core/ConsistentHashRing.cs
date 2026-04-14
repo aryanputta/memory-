@@ -77,7 +77,9 @@ namespace MercuryCache.Core
                     if (kvp.Key >= hash)
                         return kvp.Value;
                 // Wrap around to the first node
-                return _ring.Values.GetEnumerator().Current;
+                foreach (var first in _ring)
+                    return first.Value;
+                return null;
             }
         }
 
